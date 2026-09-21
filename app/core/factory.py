@@ -1,4 +1,5 @@
 from app.core.provider import LLMProvider
+from app.core.exceptions import UnknownProviderError
 
 
 class ProviderFactory:
@@ -14,4 +15,6 @@ class ProviderFactory:
 
     @classmethod
     def create(cls, name:str) -> LLMProvider:
+        if name not in cls._registry:
+            raise UnknownProviderError(f"Unknown provider: {name}")
         return cls._registry[name]()
