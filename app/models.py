@@ -6,8 +6,8 @@ class Message(BaseModel) :
     content:str
 
 class CompletionConfig(BaseModel) :
-    temperature: float = Field(ge=0, le=1)
-    max_tokens: int = Field(gt=0)
+    temperature: float | None = Field(default = None, ge=0, le=1)
+    max_tokens: int | None = Field(default = None, gt=0)
 
 class CompletionRequest(BaseModel):
     provider:str
