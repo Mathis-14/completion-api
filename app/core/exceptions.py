@@ -1,0 +1,4 @@
+
+class UnknownProviderError(Exception):
+    pass
+
