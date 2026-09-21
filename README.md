@@ -3,11 +3,17 @@
 Multi-provider completion API built with FastAPI, organized into layers:
 routers → services → core.
 
-`POST /completions`, configuration, the provider factory and plugin discovery
-are in place. Live provider calls remain to be implemented;
-tests use a fake provider.
+`POST /completions` supports live Mistral calls through the provider factory
+and automatic plugin discovery. Other providers remain to be implemented.
+Tests use fake providers and a fake Mistral client, without network calls.
 
 Requirements: Python 3.14+ and uv.
+
+Set `MISTRAL_API_KEY` in a `.env` file at the project root. Use provider
+`mistral` and a supported model such as `ministral-8b-latest` in requests.
+
+Explicit handling of missing credentials, SDK failures and unsupported
+response shapes remains to be implemented; these currently result in HTTP 500.
 
 Start the API:
 
