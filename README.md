@@ -3,17 +3,24 @@
 Multi-provider completion API built with FastAPI, organized into layers:
 routers → services → core.
 
-`POST /completions` supports live Mistral calls through the provider factory
-and automatic plugin discovery. Other providers remain to be implemented.
-Tests use fake providers and a fake Mistral client, without network calls.
+`POST /completions` supports Mistral, OpenAI and Anthropic through the provider
+factory and automatic plugin discovery. Tests use fake providers and SDK clients,
+without network calls. Live calls have been verified with Mistral only.
 
 Requirements: Python 3.14+ and uv.
 
-Set `MISTRAL_API_KEY` in a `.env` file at the project root. Use provider
-`mistral` and a supported model such as `ministral-8b-latest` in requests.
+Set the keys for the providers you use in a `.env` file at the project root:
 
-Explicit handling of missing credentials, SDK failures and unsupported
-response shapes remains to be implemented; these currently result in HTTP 500.
+- `MISTRAL_API_KEY` for provider `mistral`.
+- `OPENAI_API_KEY` for provider `openai`.
+- `ANTHROPIC_API_KEY` for provider `anthropic`.
+
+Specify the provider and a compatible model in each request. Model-specific
+restrictions on generation parameters, such as temperature, still apply.
+
+Explicit handling of missing credentials, SDK failures and unsupported response
+shapes remains to be implemented. Unhandled exceptions result in HTTP 500;
+Anthropic responses without text blocks currently return an empty content string.
 
 Start the API:
 
