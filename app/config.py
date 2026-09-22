@@ -24,6 +24,5 @@ def extract_api_keys(values: dict[str, str | None]) -> dict[str, str]:
 
 def get_settings() -> Settings:
     values = dotenv_values(DOTENV_PATH)
-    values.update(os.environ)
     api_keys = extract_api_keys(values)
     return Settings(api_keys=api_keys)
