@@ -4,16 +4,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.config import Settings
+from pydantic import SecretStr
 from app.core.plugins import anthropic
 from app.models import CompletionConfig, Message
 
 
 @pytest.mark.parametrize("system_texts", [[], ["Keep your answer short.", "Be polite."]])
 def test_anthropic_complete_returns_message(monkeypatch, system_texts):
-    def fake_get_settings():
-        return Settings(api_keys={"anthropic": "fake-key"})
-
     received = {}
     fake_response = SimpleNamespace(content=[
         SimpleNamespace(type="thinking", thinking="Internal reasoning"),
@@ -34,7 +31,6 @@ def test_anthropic_complete_returns_message(monkeypatch, system_texts):
         received["api_key"] = api_key
         return SimpleNamespace(messages=FakeMessages(), close=AsyncMock())
 
-    monkeypatch.setattr(anthropic, "get_settings", fake_get_settings)
     monkeypatch.setattr(anthropic, "AsyncAnthropic", fake_anthropic)
 
     messages = [Message(role="system", content=text) for text in system_texts]
@@ -47,7 +43,7 @@ def test_anthropic_complete_returns_message(monkeypatch, system_texts):
     provider = anthropic.AnthropicProvider()
 
     async def run_completion():
-        await provider.start()
+        await provider.start(api_key=SecretStr("fake-key"))
         try:
             return await provider.complete(messages, "fake-model", config)
         finally:

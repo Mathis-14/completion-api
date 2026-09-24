@@ -2,15 +2,12 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from app.config import Settings
+from pydantic import SecretStr
 from app.core.plugins import openai
 from app.models import CompletionConfig, Message
 
 
 def test_openai_complete_returns_message(monkeypatch):
-    def fake_get_settings():
-        return Settings(api_keys={"openai": "fake-key"})
-
     received = {}
     fake_message = SimpleNamespace(role="assistant", content="Hello Mathis!")
     fake_response = SimpleNamespace(choices=[SimpleNamespace(message=fake_message)])
@@ -29,7 +26,6 @@ def test_openai_complete_returns_message(monkeypatch):
             chat=SimpleNamespace(completions=FakeCompletions()), close=AsyncMock()
         )
 
-    monkeypatch.setattr(openai, "get_settings", fake_get_settings)
     monkeypatch.setattr(openai, "AsyncOpenAI", fake_openai)
 
     messages = [
@@ -40,7 +36,7 @@ def test_openai_complete_returns_message(monkeypatch):
     provider = openai.OpenAIProvider()
 
     async def run_completion():
-        await provider.start()
+        await provider.start(api_key=SecretStr("fake-key"))
         try:
             return await provider.complete(messages, "fake-model", config)
         finally:

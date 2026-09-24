@@ -1,15 +1,12 @@
 import asyncio
 from types import SimpleNamespace
 
-from app.config import Settings
+from pydantic import SecretStr
 from app.models import Message, CompletionConfig
 from app.core.plugins import mistral
 
 
 def test_mistral_complete_returns_message(monkeypatch):
-    def fake_get_settings():
-        return Settings(api_keys={"mistral": "fake-key"})
-
     messages = [
         Message(role="system", content="Keep your answer short."),
         Message(role="user", content="Hello"),
@@ -35,13 +32,12 @@ def test_mistral_complete_returns_message(monkeypatch):
         received["api_key"] = api_key
         return SimpleNamespace(chat=FakeChat())
 
-    monkeypatch.setattr(mistral, "get_settings", fake_get_settings)
     monkeypatch.setattr(mistral, "Mistral", fake_mistral)
 
     provider = mistral.MistralProvider()
 
     async def run_completion():
-        await provider.start()
+        await provider.start(api_key=SecretStr("fake-key"))
         try:
             return await provider.complete(messages, model, config)
         finally:
