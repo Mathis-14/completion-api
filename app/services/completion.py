@@ -22,7 +22,7 @@ async def create_completion(
         )
 
 
-    provider = ProviderFactory.create(request.provider)
+    provider = ProviderFactory.get_instance(request.provider)
     response = await provider.complete(request.messages, request.model, effective_config)
     return response
 

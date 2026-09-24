@@ -6,6 +6,9 @@ from app.core.provider import LLMProvider
 from app.models import Message
 
 def test_unknown_provider_returns_400(monkeypatch):
+    monkeypatch.setattr(ProviderFactory, "_registry", {})
+    monkeypatch.setattr(ProviderFactory, "_instances", {})
+
     def fake_get_settings():
           return Settings(
               api_keys={},
@@ -17,6 +20,7 @@ def test_unknown_provider_returns_400(monkeypatch):
         get_settings,
         fake_get_settings,
     )
+    monkeypatch.setattr("app.main.get_settings", fake_get_settings)
 
     with TestClient(app) as client:
         response = client.post(
@@ -39,15 +43,22 @@ def test_unknown_provider_returns_400(monkeypatch):
 
 def test_completion_returns_200(monkeypatch):
     monkeypatch.setattr(ProviderFactory, "_registry", {})
+    monkeypatch.setattr(ProviderFactory, "_instances", {})
 
     @ProviderFactory.register("fake")
     class FakeProvider(LLMProvider):
+        async def start(self):
+            pass
+
+        async def close(self):
+            pass
+
         async def complete(self, messages, model, config) :
             return Message(role="assistant", content="hi!")
 
     def fake_get_settings():
           return Settings(
-              api_keys={},
+              api_keys={"fake": "fake-key"},
               default_temperature=0.7,
               default_max_tokens=4096,
           )
@@ -57,6 +68,7 @@ def test_completion_returns_200(monkeypatch):
         get_settings,
         fake_get_settings,
     )
+    monkeypatch.setattr("app.main.get_settings", fake_get_settings)
 
     with TestClient(app) as client:
         response = client.post(
@@ -79,6 +91,9 @@ def test_completion_returns_200(monkeypatch):
 
 
 def test_empty_messages_returns_422(monkeypatch):
+    monkeypatch.setattr(ProviderFactory, "_registry", {})
+    monkeypatch.setattr(ProviderFactory, "_instances", {})
+
     def fake_get_settings():
         return Settings(
             api_keys={},
@@ -91,6 +106,7 @@ def test_empty_messages_returns_422(monkeypatch):
         get_settings,
         fake_get_settings,
     )
+    monkeypatch.setattr("app.main.get_settings", fake_get_settings)
 
     with TestClient(app) as client:
         response = client.post(

@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 from app.config import Settings
@@ -32,16 +31,23 @@ def test_mistral_complete_returns_message(monkeypatch):
             received["max_tokens"] = max_tokens
             return fake_response
 
-    @asynccontextmanager
-    async def fake_mistral(*, api_key):
+    def fake_mistral(*, api_key, client, async_client):
         received["api_key"] = api_key
-        yield SimpleNamespace(chat=FakeChat())
+        return SimpleNamespace(chat=FakeChat())
 
     monkeypatch.setattr(mistral, "get_settings", fake_get_settings)
     monkeypatch.setattr(mistral, "Mistral", fake_mistral)
 
     provider = mistral.MistralProvider()
-    result = asyncio.run(provider.complete(messages, model, config))
+
+    async def run_completion():
+        await provider.start()
+        try:
+            return await provider.complete(messages, model, config)
+        finally:
+            await provider.close()
+
+    result = asyncio.run(run_completion())
 
     assert received["api_key"] == "fake-key"
     assert received["model"] == model

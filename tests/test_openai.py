@@ -1,6 +1,6 @@
 import asyncio
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from app.config import Settings
 from app.core.plugins import openai
@@ -23,10 +23,11 @@ def test_openai_complete_returns_message(monkeypatch):
             received["max_completion_tokens"] = max_completion_tokens
             return fake_response
 
-    @asynccontextmanager
-    async def fake_openai(*, api_key):
+    def fake_openai(*, api_key):
         received["api_key"] = api_key
-        yield SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+        return SimpleNamespace(
+            chat=SimpleNamespace(completions=FakeCompletions()), close=AsyncMock()
+        )
 
     monkeypatch.setattr(openai, "get_settings", fake_get_settings)
     monkeypatch.setattr(openai, "AsyncOpenAI", fake_openai)
@@ -37,7 +38,15 @@ def test_openai_complete_returns_message(monkeypatch):
     ]
     config = CompletionConfig(temperature=0, max_tokens=100)
     provider = openai.OpenAIProvider()
-    result = asyncio.run(provider.complete(messages, "fake-model", config))
+
+    async def run_completion():
+        await provider.start()
+        try:
+            return await provider.complete(messages, "fake-model", config)
+        finally:
+            await provider.close()
+
+    result = asyncio.run(run_completion())
 
     assert received["api_key"] == "fake-key"
     assert received["model"] == "fake-model"
