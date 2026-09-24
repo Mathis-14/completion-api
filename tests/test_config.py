@@ -8,12 +8,14 @@ from app.config import extract_api_keys, get_settings
 
 @pytest.fixture
 def isolated_config(monkeypatch, tmp_path):
+    get_settings.cache_clear()
     monkeypatch.setattr(config, "DOTENV_PATH", tmp_path / ".env")
     working_directory = tmp_path / "other_directory"
     working_directory.mkdir()
     monkeypatch.chdir(working_directory)
     monkeypatch.setattr(os, "environ", {})
-    return tmp_path
+    yield tmp_path
+    get_settings.cache_clear()
 
 
 def test_extract_api_keys_filters_values_and_preserves_secrets():

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from app.main import app
 from app.config import Settings, get_settings
 from app.core.factory import ProviderFactory
@@ -47,7 +48,7 @@ def test_completion_returns_200(monkeypatch):
 
     @ProviderFactory.register("fake")
     class FakeProvider(LLMProvider):
-        async def start(self):
+        async def start(self, api_key: SecretStr) -> None:
             pass
 
         async def close(self):

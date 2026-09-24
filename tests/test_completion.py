@@ -1,4 +1,5 @@
 import asyncio
+from pydantic import SecretStr
 from app.config import Settings
 from app.core.factory import ProviderFactory
 from app.core.provider import LLMProvider
@@ -14,7 +15,7 @@ def test_create_completion_applies_defaults(monkeypatch):
 
     @ProviderFactory.register("fake")
     class FakeProvider(LLMProvider):
-        async def start(self):
+        async def start(self, api_key: SecretStr) -> None:
             pass
 
         async def close(self):
@@ -56,7 +57,7 @@ def test_create_completion_preserves_provided_values(monkeypatch):
 
     @ProviderFactory.register("fake")
     class FakeProvider(LLMProvider):
-        async def start(self):
+        async def start(self, api_key: SecretStr) -> None:
             pass
 
         async def close(self):

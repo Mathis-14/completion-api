@@ -1,8 +1,8 @@
 from app.core.factory import ProviderFactory
 from app.core.provider import LLMProvider
 from app.models import Message, CompletionConfig
-from app.config import get_settings
 from mistralai.client import Mistral
+from pydantic import SecretStr
 import httpx
 
 #Mistral SDK does not provide a puplic method close() like anthropic or openai
@@ -18,11 +18,9 @@ class MistralProvider(LLMProvider) :
         self._http_client: httpx.Client | None = None
         self._async_http_client: httpx.AsyncClient | None = None
 
-    async def start(self) -> None:
+    async def start(self, api_key: SecretStr) -> None:
         if self._client is not None:
             return
-        settings = get_settings()
-        api_key = settings.api_keys["mistral"]
         self._http_client = httpx.Client(follow_redirects=True) 
         self._async_http_client = httpx.AsyncClient(follow_redirects=True)
 

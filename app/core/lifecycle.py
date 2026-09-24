@@ -12,7 +12,7 @@ async def start_providers(settings: Settings) -> list[LLMProvider]:
         for name in settings.api_keys:
             provider = ProviderFactory.build(name)
             providers.append(provider)
-            await provider.start()
+            await provider.start(api_key=settings.api_keys[name])
     except BaseException:
       await close_providers(providers)
       raise

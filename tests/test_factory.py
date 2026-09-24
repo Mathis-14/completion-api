@@ -1,4 +1,5 @@
 import pytest
+from pydantic import SecretStr
 from app.core.factory import ProviderFactory
 from app.core.provider import LLMProvider
 from app.models import Message
@@ -10,7 +11,7 @@ def test_build_returns_registered_provider(monkeypatch):
 
     @ProviderFactory.register("fake")
     class FakeProvider(LLMProvider):
-        async def start(self):
+        async def start(self, api_key: SecretStr) -> None:
             pass
 
         async def close(self):
