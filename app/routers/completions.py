@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.config import Settings, get_settings
 from app.models import CompletionRequest, Message
 from app.services.completion import create_completion
-from app.core.exceptions import UnknownProviderError
+from app.core.exceptions import ProviderNotConfiguredError, UnknownProviderError
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ async def complete(
     try:
         response = await create_completion(request, settings)
         return response
-    except UnknownProviderError as exc:
+    except (UnknownProviderError, ProviderNotConfiguredError) as exc:
         raise HTTPException(
             status_code = 400,
             detail=str(exc),

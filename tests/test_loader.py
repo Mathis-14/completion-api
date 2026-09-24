@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from textwrap import dedent
 
 
 def test_load_plugins_registers_mistral():
@@ -9,9 +10,9 @@ def test_load_plugins_registers_mistral():
     from app.core.factory import ProviderFactory
 
     load_plugins()
-    provider = ProviderFactory.create("mistral")
+    provider = ProviderFactory.build("mistral")
 
     assert type(provider).__name__ == "MistralProvider"
 
     """
-    subprocess.run([sys.executable, "-c", code], check=True)
+    subprocess.run([sys.executable, "-c", dedent(code)], check=True)

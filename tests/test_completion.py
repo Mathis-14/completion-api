@@ -1,4 +1,5 @@
 import asyncio
+from pydantic import SecretStr
 from app.config import Settings
 from app.core.factory import ProviderFactory
 from app.core.provider import LLMProvider
@@ -7,18 +8,26 @@ from app.services.completion import create_completion
 
 def test_create_completion_applies_defaults(monkeypatch):
     monkeypatch.setattr(ProviderFactory, "_registry", {})
+    monkeypatch.setattr(ProviderFactory, "_instances", {})
     received = {}
     fake_response = Message(role="assistant", content="hello !")
 
 
     @ProviderFactory.register("fake")
     class FakeProvider(LLMProvider):
+        async def start(self, api_key: SecretStr) -> None:
+            pass
+
+        async def close(self):
+            pass
+
         async def complete(self, messages, model, config) :
             received["messages"] = messages
             received["model"] = model
             received["config"] = config
             return fake_response
 
+    ProviderFactory.build("fake")
     settings = Settings(
         api_keys={}, 
         default_temperature = 0.7, 
@@ -42,17 +51,25 @@ def test_create_completion_applies_defaults(monkeypatch):
 
 def test_create_completion_preserves_provided_values(monkeypatch):
     monkeypatch.setattr(ProviderFactory, "_registry", {})
+    monkeypatch.setattr(ProviderFactory, "_instances", {})
     received = {}
     fake_response = Message(role="assistant", content="hello !")
 
     @ProviderFactory.register("fake")
     class FakeProvider(LLMProvider):
+        async def start(self, api_key: SecretStr) -> None:
+            pass
+
+        async def close(self):
+            pass
+
         async def complete(self, messages, model, config):
             received["messages"] = messages
             received["model"] = model
             received["config"] = config
             return fake_response
 
+    ProviderFactory.build("fake")
     settings = Settings(
         api_keys={},
         default_temperature=0.7,

@@ -1,4 +1,4 @@
-import os
+from functools import lru_cache
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -21,9 +21,8 @@ def extract_api_keys(values: dict[str, str | None]) -> dict[str, str]:
         
     return _registry
 
-
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     values = dotenv_values(DOTENV_PATH)
-    values.update(os.environ)
     api_keys = extract_api_keys(values)
     return Settings(api_keys=api_keys)

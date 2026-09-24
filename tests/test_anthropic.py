@@ -1,19 +1,16 @@
 import asyncio
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
-from app.config import Settings
+from pydantic import SecretStr
 from app.core.plugins import anthropic
 from app.models import CompletionConfig, Message
 
 
 @pytest.mark.parametrize("system_texts", [[], ["Keep your answer short.", "Be polite."]])
 def test_anthropic_complete_returns_message(monkeypatch, system_texts):
-    def fake_get_settings():
-        return Settings(api_keys={"anthropic": "fake-key"})
-
     received = {}
     fake_response = SimpleNamespace(content=[
         SimpleNamespace(type="thinking", thinking="Internal reasoning"),
@@ -30,12 +27,10 @@ def test_anthropic_complete_returns_message(monkeypatch, system_texts):
             received["max_tokens"] = max_tokens
             return fake_response
 
-    @asynccontextmanager
-    async def fake_anthropic(*, api_key):
+    def fake_anthropic(*, api_key):
         received["api_key"] = api_key
-        yield SimpleNamespace(messages=FakeMessages())
+        return SimpleNamespace(messages=FakeMessages(), close=AsyncMock())
 
-    monkeypatch.setattr(anthropic, "get_settings", fake_get_settings)
     monkeypatch.setattr(anthropic, "AsyncAnthropic", fake_anthropic)
 
     messages = [Message(role="system", content=text) for text in system_texts]
@@ -46,7 +41,15 @@ def test_anthropic_complete_returns_message(monkeypatch, system_texts):
     ])
     config = CompletionConfig(temperature=0, max_tokens=100)
     provider = anthropic.AnthropicProvider()
-    result = asyncio.run(provider.complete(messages, "fake-model", config))
+
+    async def run_completion():
+        await provider.start(api_key=SecretStr("fake-key"))
+        try:
+            return await provider.complete(messages, "fake-model", config)
+        finally:
+            await provider.close()
+
+    result = asyncio.run(run_completion())
 
     assert received["api_key"] == "fake-key"
     assert received["model"] == "fake-model"

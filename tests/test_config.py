@@ -8,12 +8,14 @@ from app.config import extract_api_keys, get_settings
 
 @pytest.fixture
 def isolated_config(monkeypatch, tmp_path):
+    get_settings.cache_clear()
     monkeypatch.setattr(config, "DOTENV_PATH", tmp_path / ".env")
     working_directory = tmp_path / "other_directory"
     working_directory.mkdir()
     monkeypatch.chdir(working_directory)
     monkeypatch.setattr(os, "environ", {})
-    return tmp_path
+    yield tmp_path
+    get_settings.cache_clear()
 
 
 def test_extract_api_keys_filters_values_and_preserves_secrets():
@@ -51,7 +53,7 @@ def test_get_settings_loads_dotenv_and_masks_secrets(isolated_config):
     assert "MISTRAL_API_KEY" not in os.environ
 
 
-def test_get_settings_environment_overrides_dotenv(isolated_config, monkeypatch):
+def test_shell_does_not_override_dotenv(isolated_config, monkeypatch):
     (isolated_config / ".env").write_text(
         "MISTRAL_API_KEY=FictiveFileKey\nOPENAI_API_KEY=FictiveOpenAI\n",
         encoding="utf-8",
@@ -60,14 +62,5 @@ def test_get_settings_environment_overrides_dotenv(isolated_config, monkeypatch)
 
     settings = get_settings()
 
-    assert settings.api_keys["mistral"].get_secret_value() == "FictiveEnvironmentKey"
+    assert settings.api_keys["mistral"].get_secret_value() == "FictiveFileKey"
     assert settings.api_keys["openai"].get_secret_value() == "FictiveOpenAI"
-
-
-def test_get_settings_loads_environment_without_dotenv(isolated_config, monkeypatch):
-    monkeypatch.setenv("MISTRAL_API_KEY", "FictiveEnvironmentKey")
-
-    settings = get_settings()
-
-    assert set(settings.api_keys) == {"mistral"}
-    assert settings.api_keys["mistral"].get_secret_value() == "FictiveEnvironmentKey"

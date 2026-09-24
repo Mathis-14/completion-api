@@ -15,6 +15,8 @@ Set the keys for the providers you use in a `.env` file at the project root:
 - `OPENAI_API_KEY` for provider `openai`.
 - `ANTHROPIC_API_KEY` for provider `anthropic`.
 
+Provider API keys are read only from `.env`; shell environment variables are ignored for these keys.
+
 Specify the provider and a compatible model in each request. Model-specific
 restrictions on generation parameters, such as temperature, still apply.
 
