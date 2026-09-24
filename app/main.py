@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from app.routers.completions import router
+from app.routers import health
+from app.routers import completions
 from contextlib import asynccontextmanager
 from app.core.lifecycle import start_providers, close_providers
 from app.config import get_settings
@@ -14,4 +15,5 @@ async def lifespan(app: FastAPI):
         await close_providers(providers)
 
 app = FastAPI(lifespan = lifespan)
-app.include_router(router)
+app.include_router(health.router)
+app.include_router(completions.router)
