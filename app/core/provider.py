@@ -8,3 +8,12 @@ class LLMProvider(ABC) :
         self, messages: list[Message], model:str, config:CompletionConfig
     ) -> Message: ...
 
+
+    @abstractmethod
+    async def start(self) -> None:
+        ...
+    
+    @abstractmethod
+    async def close(self) -> None:
+        ...
+
