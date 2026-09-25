@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     api_keys: dict[str, SecretStr]
     default_temperature: float = Field(default=0.7, ge=0, le=1)
     default_max_tokens: int = Field(default = 4096, gt=0)
+    workflow_timeout_seconds: float = Field(default=120, gt=0, lt=300)
 
 
 def extract_api_keys(values: dict[str, str | None]) -> dict[str, str]:
