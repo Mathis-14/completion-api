@@ -14,3 +14,8 @@ class CompletionRequest(BaseModel):
     model:str
     messages:list[Message] = Field(min_length=1)
     config:CompletionConfig
+
+
+class CompletionRejection(BaseModel):
+    code: Literal["unknown_provider", "provider_not_configured"]
+    detail: str
