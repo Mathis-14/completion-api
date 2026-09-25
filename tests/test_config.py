@@ -1,9 +1,9 @@
 import os
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from app import config
-from app.config import extract_api_keys, get_settings
+from app.config import Settings, extract_api_keys, get_settings
 
 
 @pytest.fixture
@@ -64,3 +64,9 @@ def test_shell_does_not_override_dotenv(isolated_config, monkeypatch):
 
     assert settings.api_keys["mistral"].get_secret_value() == "FictiveFileKey"
     assert settings.api_keys["openai"].get_secret_value() == "FictiveOpenAI"
+
+
+@pytest.mark.parametrize("timeout", [0, -1, 300])
+def test_workflow_timeout_must_fit_http_wait(timeout):
+    with pytest.raises(ValidationError):
+        Settings(api_keys={}, workflow_timeout_seconds=timeout)

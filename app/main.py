@@ -1,19 +1,24 @@
-from fastapi import FastAPI
-from app.routers import health
-from app.routers import completions
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from app.core.lifecycle import start_providers, close_providers
+
+from fastapi import FastAPI
+
 from app.config import get_settings
+from app.routers import completions, health
+from app.workflows.client import open_completion_executor
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    providers = await start_providers(settings)
-    try: 
+    async with open_completion_executor(
+        settings.api_keys["mistral"],
+        timeout_seconds=settings.workflow_timeout_seconds,
+    ) as execute_completion:
+        app.state.execute_completion = execute_completion
         yield
-    finally:
-        await close_providers(providers)
 
-app = FastAPI(lifespan = lifespan)
+
+app = FastAPI(lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(completions.router)
