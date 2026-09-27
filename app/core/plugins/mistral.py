@@ -1,14 +1,13 @@
 from app.core.factory import ProviderFactory
 from app.core.provider import LLMProvider
+from app.core.exceptions import ProviderAuthenticationError
 from app.models import Message, CompletionConfig
 from mistralai.client import Mistral
+from mistralai.client.errors import SDKError
 from pydantic import SecretStr
 import httpx
 
 #Mistral SDK does not provide a puplic method close() like anthropic or openai
-
-
-
 
 @ProviderFactory.register("mistral")
 class MistralProvider(LLMProvider) :
@@ -49,12 +48,19 @@ class MistralProvider(LLMProvider) :
                 "Mistral provider is not started. Call start() before complete(). "
             )
 
-        response = await self._client.chat.complete_async(
-            model=model, 
-            messages=[message.model_dump() for message in messages], 
-            temperature=config.temperature, 
-            max_tokens=config.max_tokens
+        try:
+            response = await self._client.chat.complete_async(
+                model=model,
+                messages=[message.model_dump() for message in messages],
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
             )
+        except SDKError as exc:
+            if exc.status_code == 401:
+                raise ProviderAuthenticationError(
+                    "Authentication failed for provider: mistral"
+                ) from exc
+            raise
 
         mistral_message = response.choices[0].message
         return Message(role="assistant", content=mistral_message.content)

@@ -1,6 +1,7 @@
-from anthropic import AsyncAnthropic, omit
+from anthropic import AuthenticationError, AsyncAnthropic, omit
 from pydantic import SecretStr
 
+from app.core.exceptions import ProviderAuthenticationError
 from app.core.factory import ProviderFactory
 from app.core.provider import LLMProvider
 from app.models import CompletionConfig, Message
@@ -45,13 +46,15 @@ class AnthropicProvider(LLMProvider):
             message.model_dump() for message in messages if message.role != "system"
         ]
 
-        response = await self._client.messages.create(
-            model=model,
-            system=system or omit,
-            messages=conversation,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens, #max_tokens is mandatory for anthropic
-        )
+        try:
+            response = await self._client.messages.create(
+                model=model,
+                system=system or omit,
+                messages=conversation,
+                max_tokens=config.max_tokens,
+            )
+        except AuthenticationError as exc:
+            raise ProviderAuthenticationError("Authentication failed for provider: anthropic") from exc
 
         content = "".join(
             block.text for block in response.content if block.type == "text"

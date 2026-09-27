@@ -1,57 +1,79 @@
 import asyncio
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
+import json
+from functools import partial
+from unittest.mock import Mock
 
+import httpx2
+import pytest
+from openai import RateLimitError
 from pydantic import SecretStr
+
+from app.core.exceptions import ProviderAuthenticationError
 from app.core.plugins import openai
 from app.models import CompletionConfig, Message
 
 
-def test_openai_complete_returns_message(monkeypatch):
-    received = {}
-    fake_message = SimpleNamespace(role="assistant", content="Hello Mathis!")
-    fake_response = SimpleNamespace(choices=[SimpleNamespace(message=fake_message)])
-
-    class FakeCompletions:
-        async def create(self, *, model, messages, temperature, max_completion_tokens):
-            received["model"] = model
-            received["messages"] = messages
-            received["temperature"] = temperature
-            received["max_completion_tokens"] = max_completion_tokens
-            return fake_response
-
-    def fake_openai(*, api_key):
-        received["api_key"] = api_key
-        return SimpleNamespace(
-            chat=SimpleNamespace(completions=FakeCompletions()), close=AsyncMock()
-        )
-
-    monkeypatch.setattr(openai, "AsyncOpenAI", fake_openai)
-
-    messages = [
-        Message(role="system", content="Keep your answer short."),
-        Message(role="user", content="Hello"),
-    ]
-    config = CompletionConfig(temperature=0, max_tokens=100)
+@pytest.fixture
+def provider_client(monkeypatch):
+    respond = Mock()
+    http_client = httpx2.AsyncClient(transport=httpx2.MockTransport(respond))
+    monkeypatch.setattr(openai, "AsyncOpenAI", partial(
+        openai.AsyncOpenAI, http_client=http_client, max_retries=0,
+    ))
     provider = openai.OpenAIProvider()
+    try:
+        asyncio.run(provider.start(SecretStr("fake-key")))
+        respond.assert_not_called()
+        yield provider, respond
+    finally:
+        asyncio.run(provider.close())
+        assert http_client.is_closed
 
-    async def run_completion():
-        await provider.start(api_key=SecretStr("fake-key"))
-        try:
-            return await provider.complete(messages, "fake-model", config)
-        finally:
-            await provider.close()
 
-    result = asyncio.run(run_completion())
+def test_openai_reuses_client_and_returns_messages(provider_client):
+    provider, respond = provider_client
+    respond.side_effect = lambda request: httpx2.Response(200, json={
+        "id": "test", "object": "chat.completion", "created": 0,
+        "model": "fake-model",
+        "choices": [{
+            "index": 0, "finish_reason": "stop",
+            "message": {"role": "assistant", "content": "Hello!"},
+        }],
+    })
+    messages = [Message(role="user", content="Hello")]
+    client = provider._client
 
-    assert received["api_key"] == "fake-key"
-    assert received["model"] == "fake-model"
-    assert received["messages"] == [
-        {"role": "system", "content": "Keep your answer short."},
-        {"role": "user", "content": "Hello"},
-    ]
-    assert received["temperature"] == 0
-    assert received["max_completion_tokens"] == 100
-    assert isinstance(result, Message)
-    assert result.role == "assistant"
-    assert result.content == "Hello Mathis!"
+    async def run():
+        for _ in range(2):
+            result = await provider.complete(
+                messages, "fake-model", CompletionConfig(temperature=0, max_tokens=100)
+            )
+            assert result == Message(role="assistant", content="Hello!")
+            assert provider._client is client
+
+    asyncio.run(run())
+    assert respond.call_count == 2
+    request = respond.call_args.args[0]
+    assert request.headers["authorization"] == "Bearer fake-key"
+    assert json.loads(request.content) == {
+        "model": "fake-model", "messages": [{"role": "user", "content": "Hello"}],
+        "temperature": 0, "max_completion_tokens": 100,
+    }
+
+
+def test_openai_translates_authentication_failure(provider_client):
+    provider, respond = provider_client
+    respond.return_value = httpx2.Response(401, json={"error": {"message": "Invalid key"}})
+
+    with pytest.raises(ProviderAuthenticationError) as caught:
+        asyncio.run(provider.complete([], "fake-model", CompletionConfig(max_tokens=10)))
+
+    assert caught.value.__cause__.status_code == 401
+
+
+def test_openai_preserves_rate_limit_error(provider_client):
+    provider, respond = provider_client
+    respond.return_value = httpx2.Response(429, json={"error": {"message": "Rate limit"}})
+
+    with pytest.raises(RateLimitError):
+        asyncio.run(provider.complete([], "fake-model", CompletionConfig(max_tokens=10)))

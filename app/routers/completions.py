@@ -1,35 +1,28 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-
+from fastapi import APIRouter, Depends, HTTPException
 from app.config import Settings, get_settings
-from app.core.completion_executor import CompletionExecutor
-from app.core.exceptions import ProviderNotConfiguredError, UnknownProviderError
 from app.models import CompletionRequest, Message
 from app.services.completion import create_completion
+from app.core.exceptions import ProviderAuthenticationError, UnknownProviderError
 
 router = APIRouter()
-
-
-def get_completion_executor(request: Request) -> CompletionExecutor:
-    return request.app.state.execute_completion
-
 
 @router.post("/completions", response_model=Message)
 async def complete(
     request: CompletionRequest,
     settings: Settings = Depends(get_settings),
-    execute_completion: CompletionExecutor = Depends(get_completion_executor),
 ) -> Message:
 
     try:
-        response = await create_completion(request, settings, execute_completion)
+        response = await create_completion(request, settings)
         return response
-    except (UnknownProviderError, ProviderNotConfiguredError) as exc:
+    except UnknownProviderError as exc:
         raise HTTPException(
             status_code = 400,
             detail=str(exc),
         ) from exc
-    except TimeoutError as exc:
+
+    except ProviderAuthenticationError as exc:
         raise HTTPException(
-            status_code=504,
-            detail="Completion timed out",
+            status_code = 500,
+            detail=str(exc),
         ) from exc
