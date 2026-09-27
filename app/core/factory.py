@@ -1,6 +1,6 @@
 from app.core.provider import LLMProvider
 from app.core.exceptions import UnknownProviderError
-from app.core.exceptions import ProviderNotConfiguredError
+
 
 
 class ProviderFactory:
@@ -18,21 +18,27 @@ class ProviderFactory:
     def build(cls, name:str) ->LLMProvider:
         if name not in cls._registry:
             raise UnknownProviderError(f"Unknown provider: {name}")
-        if name in cls._instances:
-            return cls._instances[name]
+        return cls._registry[name]()
 
-        cls._instances[name] = cls._registry[name]()
-        return cls._instances[name]
+    @classmethod
+    def publish(cls, name:str, instance:LLMProvider) ->None:
+        if name not in cls._registry:
+            raise UnknownProviderError(f"Unknown provider: {name}")
+        cls._instances[name] = instance
 
+    @classmethod
+    def registered_names(cls) -> list[str]:
+        return list(cls._registry)
 
     @classmethod
     def get_instance(cls, name:str) -> LLMProvider:
-        if name not in cls._registry:
-            raise UnknownProviderError(f"Unknown provider: {name}")
         if name not in cls._instances:
-            raise ProviderNotConfiguredError(f"Provider is not configured: {name}")
+            raise UnknownProviderError(f"Unknown provider: {name}")
         return cls._instances[name]
 
+    @classmethod
+    def registered_instances(cls) -> list[LLMProvider]:
+        return list(cls._instances.values())
 
     @classmethod
     def clear_instances(cls) -> None:

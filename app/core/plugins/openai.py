@@ -1,5 +1,6 @@
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AuthenticationError
 from pydantic import SecretStr
+from app.core.exceptions import ProviderAuthenticationError
 
 from app.core.factory import ProviderFactory
 from app.core.provider import LLMProvider
@@ -34,13 +35,15 @@ class OpenAIProvider(LLMProvider):
             raise RuntimeError(
                 "OpenAI provider is not started. Call start() before complete(). "
             )
-     
-        response = await self._client.chat.completions.create(
-            model=model,
-            messages=[message.model_dump() for message in messages],
-            temperature=config.temperature,
-            max_completion_tokens=config.max_tokens,
-        )
+        try:
+            response = await self._client.chat.completions.create(
+                model=model,
+                messages=[message.model_dump() for message in messages],
+                temperature=config.temperature,
+                max_completion_tokens=config.max_tokens,
+            )
+        except AuthenticationError as exc:
+            raise ProviderAuthenticationError("Authentication failed for provider: openai") from exc
 
         openai_message = response.choices[0].message
         return Message(role="assistant", content=openai_message.content)

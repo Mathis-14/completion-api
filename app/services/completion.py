@@ -1,12 +1,10 @@
 from app.config import Settings
-from app.core.completion_executor import CompletionExecutor
+from app.core.factory import ProviderFactory
 from app.models import CompletionConfig, CompletionRequest, Message
-
 
 async def create_completion(
     request: CompletionRequest,
     settings: Settings,
-    execute_completion: CompletionExecutor,
 ) -> Message:
 
     temperature = request.config.temperature
@@ -23,9 +21,7 @@ async def create_completion(
         max_tokens=max_tokens
         )
 
-    return await execute_completion(
-        request.provider,
-        request.messages,
-        request.model,
-        effective_config,
-    )
+
+    provider = ProviderFactory.get_instance(request.provider)
+    response = await provider.complete(request.messages, request.model, effective_config)
+    return response

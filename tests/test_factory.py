@@ -23,6 +23,20 @@ def test_build_returns_registered_provider(monkeypatch):
     provider = ProviderFactory.build("fake")
     assert isinstance(provider, FakeProvider)
 
+    # Construction alone must not make the provider available to requests.
+    with pytest.raises(UnknownProviderError):
+        ProviderFactory.get_instance("fake")
+
+    ProviderFactory.publish("fake", provider)
+    assert ProviderFactory.get_instance("fake") is provider
+    assert ProviderFactory.registered_instances() == [provider]
+
+    ProviderFactory.clear_instances()
+    assert ProviderFactory.registered_instances() == []
+    assert ProviderFactory.registered_names() == ["fake"]
+    with pytest.raises(UnknownProviderError):
+        ProviderFactory.get_instance("fake")
+
 def test_build_unknown_provider_raises_unknown_provider_error(monkeypatch):
     monkeypatch.setattr(ProviderFactory, "_registry", {})
     monkeypatch.setattr(ProviderFactory, "_instances", {})

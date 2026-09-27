@@ -1,72 +1,89 @@
 import asyncio
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
+import json
+from functools import partial
+from unittest.mock import Mock
 
+import httpx2
 import pytest
-
+from anthropic import RateLimitError
 from pydantic import SecretStr
+
+from app.core.exceptions import ProviderAuthenticationError
 from app.core.plugins import anthropic
 from app.models import CompletionConfig, Message
 
 
-@pytest.mark.parametrize("system_texts", [[], ["Keep your answer short.", "Be polite."]])
-def test_anthropic_complete_returns_message(monkeypatch, system_texts):
-    received = {}
-    fake_response = SimpleNamespace(content=[
-        SimpleNamespace(type="thinking", thinking="Internal reasoning"),
-        SimpleNamespace(type="text", text="Hello "),
-        SimpleNamespace(type="text", text="Mathis!"),
-    ])
-
-    class FakeMessages:
-        async def create(self, *, model, system, messages, temperature, max_tokens):
-            received["model"] = model
-            received["system"] = system
-            received["messages"] = messages
-            received["temperature"] = temperature
-            received["max_tokens"] = max_tokens
-            return fake_response
-
-    def fake_anthropic(*, api_key):
-        received["api_key"] = api_key
-        return SimpleNamespace(messages=FakeMessages(), close=AsyncMock())
-
-    monkeypatch.setattr(anthropic, "AsyncAnthropic", fake_anthropic)
-
-    messages = [Message(role="system", content=text) for text in system_texts]
-    messages.extend([
-        Message(role="user", content="Hello"),
-        Message(role="assistant", content="Hi!"),
-        Message(role="user", content="My name is Mathis."),
-    ])
-    config = CompletionConfig(temperature=0, max_tokens=100)
+@pytest.fixture
+def provider_client(monkeypatch):
+    respond = Mock()
+    http_client = httpx2.AsyncClient(transport=httpx2.MockTransport(respond))
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", partial(
+        anthropic.AsyncAnthropic, http_client=http_client, max_retries=0,
+    ))
     provider = anthropic.AnthropicProvider()
+    try:
+        asyncio.run(provider.start(SecretStr("fake-key")))
+        respond.assert_not_called()
+        yield provider, respond
+    finally:
+        asyncio.run(provider.close())
+        assert http_client.is_closed
 
-    async def run_completion():
-        await provider.start(api_key=SecretStr("fake-key"))
-        try:
-            return await provider.complete(messages, "fake-model", config)
-        finally:
-            await provider.close()
 
-    result = asyncio.run(run_completion())
+@pytest.mark.parametrize("system_texts", [[], ["Keep your answer short.", "Be polite."]])
+def test_anthropic_reuses_client_and_returns_text(provider_client, system_texts):
+    provider, respond = provider_client
+    respond.side_effect = lambda request: httpx2.Response(200, json={
+        "id": "msg_test", "type": "message", "role": "assistant", "model": "fake-model",
+        "content": [
+            {"type": "thinking", "thinking": "Internal reasoning", "signature": "test"},
+            {"type": "text", "text": "Hello "},
+            {"type": "text", "text": "Mathis!"},
+        ],
+        "stop_reason": "end_turn", "stop_sequence": None,
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    })
+    messages = [Message(role="system", content=text) for text in system_texts]
+    messages.append(Message(role="user", content="Hello"))
+    client = provider._client
 
-    assert received["api_key"] == "fake-key"
-    assert received["model"] == "fake-model"
-    if system_texts:
-        assert received["system"] == [
-            {"type": "text", "text": "Keep your answer short."},
-            {"type": "text", "text": "Be polite."},
-        ]
-    else:
-        assert received["system"] is anthropic.omit
-    assert received["messages"] == [
-        {"role": "user", "content": "Hello"},
-        {"role": "assistant", "content": "Hi!"},
-        {"role": "user", "content": "My name is Mathis."},
-    ]
-    assert received["temperature"] == 0
-    assert received["max_tokens"] == 100
-    assert isinstance(result, Message)
-    assert result.role == "assistant"
-    assert result.content == "Hello Mathis!"
+    async def run():
+        for _ in range(2):
+            result = await provider.complete(
+                messages, "fake-model", CompletionConfig(temperature=0, max_tokens=100)
+            )
+            assert result == Message(role="assistant", content="Hello Mathis!")
+            assert provider._client is client
+
+    asyncio.run(run())
+    assert respond.call_count == 2
+    request = respond.call_args.args[0]
+    assert request.headers["x-api-key"] == "fake-key"
+    body = json.loads(request.content)
+    assert body["messages"] == [{"role": "user", "content": "Hello"}]
+    assert body["model"] == "fake-model"
+    assert body["max_tokens"] == 100
+    assert "temperature" not in body
+    assert body.get("system", []) == [{"type": "text", "text": text} for text in system_texts]
+
+
+def test_anthropic_translates_authentication_failure(provider_client):
+    provider, respond = provider_client
+    respond.return_value = httpx2.Response(401, json={
+        "type": "error", "error": {"type": "authentication_error", "message": "Invalid key"},
+    })
+
+    with pytest.raises(ProviderAuthenticationError) as caught:
+        asyncio.run(provider.complete([], "fake-model", CompletionConfig(max_tokens=10)))
+
+    assert caught.value.__cause__.status_code == 401
+
+
+def test_anthropic_preserves_rate_limit_error(provider_client):
+    provider, respond = provider_client
+    respond.return_value = httpx2.Response(429, json={
+        "type": "error", "error": {"type": "rate_limit_error", "message": "Rate limit"},
+    })
+
+    with pytest.raises(RateLimitError):
+        asyncio.run(provider.complete([], "fake-model", CompletionConfig(max_tokens=10)))
